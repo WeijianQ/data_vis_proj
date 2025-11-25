@@ -1,0 +1,187 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666666;
+  --grid-gap: 18px;
+  --card-bg: #f8f9fa;
+  --accent: #2563eb;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 16px 48px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+  color: var(--fg); background: var(--bg);
+}
+header { max-width: 1200px; margin: 24px auto 8px; }
+header h1 { margin: 16px 0 8px; font-weight: 650; }
+header p { color: var(--muted); margin: 0; }
+
+main { max-width: 1200px; margin: 0 auto; }
+.chart-block { background: var(--card-bg); border-radius: 10px; padding: 16px; margin-top: 18px; }
+.chart-block h2 { margin: 4px 0 10px; font-weight: 600; }
+.chart-note { color: var(--muted); margin-top: 8px; font-size: 0.9rem; }
+
+#scatter, #netmap, #purposes-multiples { width: 100%; }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--grid-gap); }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+.panel { background: #ffffff; border-radius: 8px; padding: 8px; border: 1px solid #e5e7eb; }
+.panel h3 { font-size: 0.95rem; margin: 6px 4px 10px; font-weight: 600; color: var(--muted); }
+
+/* Purpose maps with menu layout */
+.purpose-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.purpose-menu {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.purpose-menu-item {
+  background: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+  color: var(--fg);
+}
+
+.purpose-menu-item:hover {
+  border-color: var(--accent);
+  background: #f0f9ff;
+}
+
+.purpose-menu-item.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.purpose-map-container {
+  flex: 1;
+  min-width: 0;
+}
+
+.purpose-map-container h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+@media (max-width: 900px) {
+  .purpose-container {
+    flex-direction: column;
+  }
+  .purpose-menu {
+    flex: none;
+    width: 100%;
+  }
+}
+
+.legend { margin-top: 8px; display: inline-block; }
+.legend svg { overflow: visible; }
+.legend .caption { fill: var(--muted); font-size: 12px; }
+
+.tooltip {
+  position: fixed; pointer-events: none; background: rgba(255,255,255,0.98); color: #333;
+  padding: 6px 8px; border-radius: 6px; font-size: 12px; border: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.axis line, .axis path { stroke: #d1d5db; }
+.axis text { fill: var(--muted); font-size: 12px; }
+.axis-label { fill: var(--muted); font-size: 13px; }
+.dot {
+  fill: var(--accent);
+  opacity: 0.8;
+  transition: r 0.2s ease, opacity 0.2s ease;
+}
+.dot:hover { opacity: 1; }
+
+/* Map theming */
+.country {
+  stroke: #e5e7eb;
+  stroke-width: 0.5px;
+  transition: all 0.2s ease;
+}
+.country:hover {
+  stroke: #166534;
+  stroke-width: 1.5px;
+  transform: scale(1.01);
+  transform-origin: center;
+  filter: brightness(1.1);
+}
+
+/* Purpose breakdown panel */
+.purpose-breakdown-panel {
+  margin-top: 20px;
+  background: white;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.breakdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.breakdown-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.close-btn {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #e5e7eb;
+  color: var(--fg);
+}
+
+.breakdown-summary {
+  margin: 8px 0 16px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.purpose-label {
+  font-size: 13px;
+  fill: var(--fg);
+}
+
+.value-label {
+  font-size: 12px;
+  fill: var(--muted);
+  font-weight: 500;
+}
+
+.dot {
+  cursor: pointer;
+}

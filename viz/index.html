@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aid Flows — Donate vs Receive, Net Balance Map, Top Purposes</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Aid Flows Explorer</h1>
+      <p>
+        Data: AidData Core Level 1 v3.1 (commitments, constant USD). Visuals:
+        log–log Donate vs Receive, Net Balance Choropleth, and Top 5 Purposes small-multiple maps.
+      </p>
+    </header>
+
+    <main>
+      <section class="chart-block" id="scatter-section">
+        <h2>Donate vs. Receive (per country, log–log)</h2>
+        <div id="scatter"></div>
+        <p class="chart-note">Each dot is a country (ISO2). Line shows y = x. <strong>Click a country to see purpose breakdown.</strong></p>
+      </section>
+
+      <section class="chart-block" id="netmap-section">
+        <h2>Geographic Patterns: Net Balance (received − donated)</h2>
+        <div id="netmap"></div>
+        <div class="legend" id="legend-diverging"></div>
+        <p class="chart-note">Diverging scale centered at 0 (red = net donor, blue = net recipient).</p>
+      </section>
+
+      <section class="chart-block" id="purposes-section">
+        <h2>Top 5 Purposes by Geography (total received)</h2>
+        <div id="purposes-multiples" class="grid"></div>
+        <div class="legend" id="legend-seq"></div>
+        <p class="chart-note">Five panels share a common color scale (higher = darker).</p>
+      </section>
+    </main>
+
+    <div id="tooltip" class="tooltip" style="opacity:0"></div>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+
