@@ -1,19 +1,21 @@
 # Mapping Who Gives, Who Gains: A Geospatial View of Global Aid Flows
 
-An interactive data visualization project exploring global development assistance patterns using AidData Core Research Release v3.1.
+An interactive data visualization dashboard exploring global development assistance patterns using AidData Core Research Release v3.1.
 
 ## Overview
 
-This project provides three complementary visualizations to understand international aid flows:
-1. **Donate vs. Receive Comparison** - Scatterplot showing which countries donate vs. receive more
-2. **Geographic Patterns** - Choropleth map revealing regional donor/recipient clusters
-3. **Top 5 Purposes by Geography** - Small-multiple maps showing how aid purposes distribute geographically
+This project provides four complementary visualizations in a 2x2 dashboard layout to understand international aid flows:
+1. **Donate vs. Receive Comparison** - Log-log scatterplot showing which countries donate vs. receive more, with click-to-view purpose breakdowns
+2. **Net Balance Map** - Choropleth map revealing geographic patterns of net donors (red) vs. net recipients (blue) using a symmetric log scale
+3. **Top 5 Purposes by Geography** - Interactive map with dropdown selector showing how aid purposes distribute geographically, with top recipients and regional distribution panels
+4. **Aid Flow Network** - Chord diagram showing bilateral aid flows between the top 15 donors and top 25 recipients
 
 ## Research Questions
 
 - **RQ1**: Which countries donate vs. receive more, and by how much?
-- **RQ2**: Do mostly-donor vs. mostly-recipient countries cluster geographically?
+- **RQ2**: Do mostly-donor vs. mostly-recipient countries cluster geographically? Any neighbor contrasts?
 - **RQ3**: How do the top 5 purposes distribute geographically among recipients?
+- **RQ4**: What are the dominant aid pathways between donor and recipient countries?
 
 ## Dataset
 
@@ -33,13 +35,11 @@ data_vis_proj/
 ├── data/
 │   └── processed/                          # Aggregated JSON datasets
 ├── scripts/
-│   ├── aggregate_aiddata.py                # Data processing (pandas)
-│   └── aggregate_aiddata_nopandas.py       # Alternative processing
+│   └── aggregate_aiddata.py                # Data processing script (pandas)
 ├── viz/
-│   ├── index.html                          # Main visualization page
+│   ├── index.html                          # Main dashboard page
 │   ├── app.js                              # D3.js visualization logic
-│   ├── styles.css                          # Styling
-│   └── world/                              # TopoJSON geographic data
+│   └── styles.css                          # Dashboard styling
 ├── PROPOSAL.md                             # Project proposal
 └── README.md                               # This file
 ```
@@ -58,54 +58,55 @@ data_vis_proj/
 
 3. **Process the data**
    ```bash
-   # Using pandas (recommended)
    python scripts/aggregate_aiddata.py
-
-   # Or without pandas
-   python scripts/aggregate_aiddata_nopandas.py
    ```
 
    This generates aggregated JSON files in `data/processed/`
 
 4. **Run the visualization**
    ```bash
-   # Start a local web server
-   cd viz
-   python -m http.server 8000
-   # Or use any other local server
+   # Start a local web server from the project root directory
+   python -m http.server 8001
    ```
 
-   Open `http://localhost:8000` in your browser
+   Open `http://localhost:8001/viz/` in your browser
 
 ## Data Processing
 
-The processing scripts:
-- Normalize country names to ISO2/ISO3 codes
-- Aggregate donations by donor country
-- Aggregate receipts by recipient country
-- Calculate net balances (donated - received)
-- Identify top 5 aid purposes globally
-- Generate purpose-specific geographic distributions
+The processing script (`scripts/aggregate_aiddata.py`):
+- Reads the large AidData CSV in memory-efficient chunks
+- Normalizes country names to ISO2 codes
+- Aggregates donations by donor country
+- Aggregates receipts by recipient country
+- Calculates net balances (received - donated)
+- Identifies top 5 aid purposes globally
+- Generates purpose-specific geographic distributions
+- Builds bilateral flow matrix for chord diagram
 
 Outputs are saved as JSON in `data/processed/`:
-- `country_totals.json` - Donor/recipient totals and net balance
+- `country_totals.json` - Donor/recipient totals and net balance per country
 - `country_purposes_donated.json` - Purpose breakdown by donor
 - `country_purposes_received.json` - Purpose breakdown by recipient
-- `purposes_top5.json` - Top 5 global purposes
+- `purposes_top5.json` - Top 5 global purposes with per-country amounts
 - `iso2_names.json` - Country name mappings
+- `top_donors_by_recipient_purpose.json` - Top 3 donors for each recipient-purpose pair
+- `chord_flows.json` - Bilateral flow matrix for chord diagram (top 15 donors, top 25 recipients)
 
 ## Visualizations
 
-Built with D3.js and TopoJSON for interactive geographic visualizations.
+Built with D3.js v7 and TopoJSON for interactive geographic visualizations.
 
-See `viz/README.md` for detailed visualization documentation.
+### Features
+- **Scatter Plot**: Log-log scale, y=x reference line, click on any country to see purpose breakdown (both donated and received)
+- **Net Balance Map**: Symmetric log color scale, diagonal hatching for no-data countries, hover to see neighbor relationships
+- **Purpose Maps**: Dropdown selector for 5 purposes, log color scale, top 5 recipients list, regional distribution bar chart
+- **Chord Diagram**: Interactive bilateral flows, hover on arcs to highlight connections, filter toggle to hide small flows
 
 ## Dependencies
 
-- Python 3.x
-- pandas (optional, for data processing)
+- Python 3.x with pandas
 - Modern web browser with JavaScript enabled
-- Local web server (for CORS compliance)
+- Local web server (for loading JSON data files)
 
 ## License
 

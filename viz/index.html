@@ -3,21 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Aid Flows — Donate vs Receive, Net Balance Map, Top Purposes</title>
+    <title>Aid Flows Dashboard</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
   </head>
   <body>
-    <header>
-      <h1>Aid Flows Explorer</h1>
-      <p>
-        Data: AidData Core Level 1 v3.1 (commitments, constant USD). Visuals:
-        log–log Donate vs Receive, Net Balance Choropleth, and Top 5 Purposes small-multiple maps.
-      </p>
+    <header class="dashboard-header">
+      <h1>Aid Flows Dashboard</h1>
+      <p>AidData Core Level 1 v3.1 (commitments, constant USD)</p>
     </header>
 
-    <main>
+    <main class="dashboard-grid">
       <section class="chart-block" id="scatter-section">
         <h2>Donate vs. Receive (per country, log–log)</h2>
         <div id="scatter"></div>
@@ -25,17 +22,29 @@
       </section>
 
       <section class="chart-block" id="netmap-section">
-        <h2>Geographic Patterns: Net Balance (received − donated)</h2>
+        <h2>Net Balance (received − donated)</h2>
         <div id="netmap"></div>
         <div class="legend" id="legend-diverging"></div>
-        <p class="chart-note">Diverging scale centered at 0 (red = net donor, blue = net recipient).</p>
+        <p class="chart-note">Red = net donor, blue = net recipient.</p>
       </section>
 
       <section class="chart-block" id="purposes-section">
-        <h2>Top 5 Purposes by Geography (total received)</h2>
-        <div id="purposes-multiples" class="grid"></div>
+        <h2>Top 5 Purposes by Geography</h2>
+        <div id="purposes-multiples"></div>
         <div class="legend" id="legend-seq"></div>
-        <p class="chart-note">Five panels share a common color scale (higher = darker).</p>
+        <p class="chart-note">Click a purpose to view. Higher = darker.</p>
+      </section>
+
+      <section class="chart-block" id="chord-section">
+        <h2>Aid Flow Network</h2>
+        <div id="chord-controls">
+          <label>
+            <input type="checkbox" id="chord-filter-small" /> Hide small flows
+          </label>
+        </div>
+        <div id="chord-diagram"></div>
+        <div id="chord-legend"></div>
+        <p class="chart-note"><span class="donor-color">Donors</span>, <span class="recipient-color">recipients</span>, <span class="mixed-color">mixed</span>. Hover for details.</p>
       </section>
     </main>
 

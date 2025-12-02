@@ -26,6 +26,15 @@ from pathlib import Path
 import pandas as pd
 
 
+def _looks_regional_or_agg(name: str) -> bool:
+    n = name.lower()
+    if 'regional' in n or 'unspecified' in n:
+        return True
+    if ',' in name:
+        return True
+    return False
+
+
 def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -34,6 +43,12 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
     received_by_iso2: dict[str, float] = defaultdict(float)
     # Purposes: sum of received by (iso2, purpose)
     rec_by_iso2_purpose: dict[tuple[str, str], float] = defaultdict(float)
+    # Purposes: sum of donated by (iso2, purpose)
+    don_by_iso2_purpose: dict[tuple[str, str], float] = defaultdict(float)
+    # Donor -> Recipient -> Purpose -> amount (for top donors per recipient-purpose)
+    donor_to_recipient_purpose: dict[tuple[str, str, str], float] = defaultdict(float)
+    # Donor -> Recipient bilateral flows (for chord diagram)
+    donor_to_recipient: dict[tuple[str, str], float] = defaultdict(float)
     # Global purpose totals
     purpose_totals: dict[str, float] = defaultdict(float)
     # ISO2 -> human name
@@ -48,11 +63,17 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
         "coalesced_purpose_name",
     ]
 
+    # Count total lines and skip the last (potentially corrupted) line
+    with open(full_csv, 'r') as f:
+        total_lines = sum(1 for _ in f)
+    nrows = total_lines - 2  # -1 for header, -1 for last line #REMOVING THE LAST LINE JUST FOR NOW SINCE THE FULL CSV WAS NOT COPIED CORRECTLY, WILL REMOVE LATER
+
     # Read in memory-efficient chunks
     for chunk in pd.read_csv(
         full_csv,
         usecols=usecols,
         chunksize=chunksize,
+        nrows=nrows,
         dtype={
             "donor_iso": "string",
             "donor": "string",
@@ -61,6 +82,7 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
             "commitment_amount_usd_constant": "float64",
             "coalesced_purpose_name": "string",
         },
+        on_bad_lines="skip",  # Skip malformed rows
     ):
         # Drop rows with missing values in critical fields
         c = chunk.dropna(subset=["donor_iso", "recipient_iso", "commitment_amount_usd_constant"]).copy()
@@ -97,11 +119,12 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
                 if iso2 not in iso2_names and not _looks_regional_or_agg(str(name)):
                     iso2_names[iso2] = str(name)
 
-        # Purposes: received by (recipient_iso, purpose)
+        # Purposes: received by (recipient_iso, purpose) and donated by (donor_iso, purpose)
         if "coalesced_purpose_name" in c.columns:
             # Fill NA purpose with a placeholder bucket
             c["coalesced_purpose_name"] = c["coalesced_purpose_name"].fillna("Unspecified purpose")
 
+            # Received by purpose
             grp = (
                 c.groupby(["recipient_iso", "coalesced_purpose_name"])  # type: ignore[list-item]
                 ["commitment_amount_usd_constant"]
@@ -110,6 +133,35 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
             for (iso2, purpose), val in grp.items():
                 rec_by_iso2_purpose[(iso2, str(purpose))] += float(val)
 
+            # Donated by purpose
+            grp_don = (
+                c.groupby(["donor_iso", "coalesced_purpose_name"])  # type: ignore[list-item]
+                ["commitment_amount_usd_constant"]
+                .sum()
+            )
+            for (iso2, purpose), val in grp_don.items():
+                don_by_iso2_purpose[(iso2, str(purpose))] += float(val)
+
+            # Donor -> Recipient -> Purpose flows (for top donors tooltip)
+            grp_drp = (
+                c.groupby(["donor_iso", "recipient_iso", "coalesced_purpose_name"])  # type: ignore[list-item]
+                ["commitment_amount_usd_constant"]
+                .sum()
+            )
+            for (donor, recipient, purpose), val in grp_drp.items():
+                donor_to_recipient_purpose[(donor, recipient, str(purpose))] += float(val)
+
+        # Donor -> Recipient bilateral flows (for chord diagram)
+        grp_bilateral = (
+            c.groupby(["donor_iso", "recipient_iso"])
+            ["commitment_amount_usd_constant"]
+            .sum()
+        )
+        for (donor, recipient), val in grp_bilateral.items():
+            donor_to_recipient[(donor, recipient)] += float(val)
+
+        # Purposes: Global totals by purpose (sum over all recipients)
+        if "coalesced_purpose_name" in c.columns:
             # Global totals by purpose (sum over all recipients)
             pt = (
                 c.groupby("coalesced_purpose_name")["commitment_amount_usd_constant"].sum().to_dict()
@@ -166,6 +218,115 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
         )
     )
 
+    # Country purposes received: { iso2: { purpose: amount, ... }, ... }
+    country_purposes_received: dict[str, dict[str, float]] = {}
+    for (iso2, purpose), val in rec_by_iso2_purpose.items():
+        if iso2 not in country_purposes_received:
+            country_purposes_received[iso2] = {}
+        country_purposes_received[iso2][purpose] = round(float(val), 2)
+
+    (out_dir / "country_purposes_received.json").write_text(
+        json.dumps(country_purposes_received, separators=(",", ":"))
+    )
+
+    # Country purposes donated: { iso2: { purpose: amount, ... }, ... }
+    country_purposes_donated: dict[str, dict[str, float]] = {}
+    for (iso2, purpose), val in don_by_iso2_purpose.items():
+        if iso2 not in country_purposes_donated:
+            country_purposes_donated[iso2] = {}
+        country_purposes_donated[iso2][purpose] = round(float(val), 2)
+
+    (out_dir / "country_purposes_donated.json").write_text(
+        json.dumps(country_purposes_donated, separators=(",", ":"))
+    )
+
+    # Top donors per recipient-purpose: { recipient_iso: { purpose: [[donor_iso, amount], ...], ... }, ... }
+    # Only keep top 3 donors per (recipient, purpose) to limit file size
+    top_donors_by_recipient_purpose: dict[str, dict[str, list]] = {}
+
+    # First, organize by (recipient, purpose) -> list of (donor, amount)
+    recipient_purpose_donors: dict[tuple[str, str], list[tuple[str, float]]] = defaultdict(list)
+    for (donor, recipient, purpose), val in donor_to_recipient_purpose.items():
+        recipient_purpose_donors[(recipient, purpose)].append((donor, float(val)))
+
+    # Now get top 3 for each
+    for (recipient, purpose), donors in recipient_purpose_donors.items():
+        # Sort by amount descending and take top 3
+        top3 = sorted(donors, key=lambda x: x[1], reverse=True)[:3]
+        if recipient not in top_donors_by_recipient_purpose:
+            top_donors_by_recipient_purpose[recipient] = {}
+        top_donors_by_recipient_purpose[recipient][purpose] = [
+            [d, round(amt, 2)] for d, amt in top3
+        ]
+
+    (out_dir / "top_donors_by_recipient_purpose.json").write_text(
+        json.dumps(top_donors_by_recipient_purpose, separators=(",", ":"))
+    )
+
+    # Chord diagram data: bilateral flows between countries
+    # We need to identify top donors and top recipients for a focused visualization
+    # Get top 15 donors by total donated
+    top_donors = sorted(donated_by_iso2.items(), key=lambda kv: kv[1], reverse=True)[:15]
+    top_donor_iso2s = {iso2 for iso2, _ in top_donors}
+
+    # Get top 25 recipients by total received (excluding those already in top donors)
+    top_recipients = sorted(
+        [(iso2, val) for iso2, val in received_by_iso2.items() if iso2 not in top_donor_iso2s],
+        key=lambda kv: kv[1],
+        reverse=True
+    )[:25]
+    top_recipient_iso2s = {iso2 for iso2, _ in top_recipients}
+
+    # Combine into a set of countries for the chord diagram
+    chord_countries = top_donor_iso2s | top_recipient_iso2s
+
+    # Build the matrix and names list
+    chord_country_list = sorted(chord_countries)
+    country_to_idx = {iso2: i for i, iso2 in enumerate(chord_country_list)}
+
+    # Create flow matrix (donor -> recipient)
+    n = len(chord_country_list)
+    matrix = [[0.0] * n for _ in range(n)]
+
+    for (donor, recipient), val in donor_to_recipient.items():
+        if donor in country_to_idx and recipient in country_to_idx:
+            i = country_to_idx[donor]
+            j = country_to_idx[recipient]
+            matrix[i][j] += float(val)
+
+    # Round values for JSON
+    matrix = [[round(v, 2) for v in row] for row in matrix]
+
+    # Mark which countries are primarily donors vs recipients
+    country_roles = {}
+    for iso2 in chord_country_list:
+        donated = donated_by_iso2.get(iso2, 0.0)
+        received = received_by_iso2.get(iso2, 0.0)
+        if donated > received * 2:
+            country_roles[iso2] = "donor"
+        elif received > donated * 2:
+            country_roles[iso2] = "recipient"
+        else:
+            country_roles[iso2] = "mixed"
+
+    chord_data = {
+        "countries": chord_country_list,
+        "names": {iso2: iso2_names.get(iso2, iso2) for iso2 in chord_country_list},
+        "roles": country_roles,
+        "matrix": matrix,
+        "totals": {
+            iso2: {
+                "donated": round(donated_by_iso2.get(iso2, 0.0), 2),
+                "received": round(received_by_iso2.get(iso2, 0.0), 2)
+            }
+            for iso2 in chord_country_list
+        }
+    }
+
+    (out_dir / "chord_flows.json").write_text(
+        json.dumps(chord_data, separators=(",", ":"))
+    )
+
 
 def main() -> None:
     p = argparse.ArgumentParser()
@@ -191,12 +352,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-def _looks_regional_or_agg(name: str) -> bool:
-    n = name.lower()
-    if 'regional' in n or 'unspecified' in n:
-        return True
-    if ',' in name:
-        return True
-    return False
