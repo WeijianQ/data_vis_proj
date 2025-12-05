@@ -19,15 +19,16 @@
   ];
 
   // Fetch processed data first to enable scatter even if maps fail
-  let totals, purposes, countryPurposesReceived, countryPurposesDonated, topDonorsByRecipientPurpose, chordFlows;
+  let totals, purposes, countryPurposesReceived, countryPurposesDonated, topDonorsByRecipientPurpose, chordFlows, temporalData;
   try {
-    [totals, purposes, countryPurposesReceived, countryPurposesDonated, topDonorsByRecipientPurpose, chordFlows] = await Promise.all([
+    [totals, purposes, countryPurposesReceived, countryPurposesDonated, topDonorsByRecipientPurpose, chordFlows, temporalData] = await Promise.all([
       d3.json(totalsPath),
       d3.json(purposesPath),
       d3.json('../data/processed/country_purposes_received.json'),
       d3.json('../data/processed/country_purposes_donated.json'),
       d3.json('../data/processed/top_donors_by_recipient_purpose.json'),
-      d3.json('../data/processed/chord_flows.json')
+      d3.json('../data/processed/chord_flows.json'),
+      d3.json('../data/processed/temporal_purposes.json')
     ]);
   } catch (e) {
     showError('#scatter-section', 'Failed to load processed JSON. Ensure you ran the aggregation and are serving over HTTP.');
@@ -201,6 +202,9 @@
 
   // 4) Chord Diagram: Aid flow network
   drawChordDiagram(chordFlows);
+
+  // 5) Temporal Chart: Aid priorities over time
+  drawTemporalChart(temporalData);
 })();
 
 async function firstOk(tasks) {
@@ -223,6 +227,50 @@ function showError(sectionSel, message) {
 function drawScatter(byIso2, nameByIso2, countryPurposesReceived, countryPurposesDonated) {
   const el = d3.select('#scatter');
   el.selectAll('*').remove();
+
+  // Country dropdown for selection
+  const controlsDiv = el.append('div')
+    .style('margin-bottom', '10px')
+    .style('display', 'flex')
+    .style('align-items', 'center')
+    .style('gap', '10px');
+
+  controlsDiv.append('label')
+    .attr('for', 'country-select')
+    .style('font-size', '13px')
+    .style('color', '#666')
+    .text('Select country:');
+
+  // Build sorted country list with names
+  const countryOptions = Array.from(byIso2.entries())
+    .filter(([iso2, d]) => d.donated > 0 && d.received > 0)
+    .map(([iso2, d]) => ({
+      iso2: iso2,
+      name: nameByIso2.get(iso2.toUpperCase()) || iso2,
+      donated: d.donated,
+      received: d.received
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const dropdown = controlsDiv.append('select')
+    .attr('id', 'country-select')
+    .style('padding', '6px 10px')
+    .style('border', '1px solid #d1d5db')
+    .style('border-radius', '6px')
+    .style('font-size', '13px')
+    .style('min-width', '200px')
+    .style('cursor', 'pointer');
+
+  dropdown.append('option')
+    .attr('value', '')
+    .text('-- Choose a country --');
+
+  dropdown.selectAll('option.country')
+    .data(countryOptions)
+    .join('option')
+    .attr('class', 'country')
+    .attr('value', d => d.iso2)
+    .text(d => d.name);
 
   const margin = { top: 20, right: 18, bottom: 40, left: 52 };
   const width = el.node().getBoundingClientRect().width || 500;
@@ -449,7 +497,47 @@ function drawScatter(byIso2, nameByIso2, countryPurposesReceived, countryPurpose
       d3.select(this).attr('stroke', '#f97316').attr('stroke-width', 3);
       showPurposeBreakdown(d);
       tt.style('opacity', 0);
+      // Update dropdown to match
+      dropdown.property('value', d.iso2);
     });
+
+  // Dropdown change event handler
+  dropdown.on('change', function() {
+    const selectedIso2 = this.value;
+
+    if (!selectedIso2) {
+      // Reset: remove all highlights and hide breakdown
+      g.selectAll('.dot')
+        .attr('stroke', 'none')
+        .attr('stroke-width', 0)
+        .attr('r', 5)
+        .attr('fill', '#2563eb');
+      breakdownPanel.style('display', 'none');
+      return;
+    }
+
+    // Find the data for the selected country
+    const selectedData = data.find(d => d.iso2 === selectedIso2);
+    if (!selectedData) return;
+
+    // Reset all dots first
+    g.selectAll('.dot')
+      .attr('stroke', 'none')
+      .attr('stroke-width', 0)
+      .attr('r', 5)
+      .attr('fill', '#2563eb');
+
+    // Highlight the selected dot
+    g.selectAll('.dot')
+      .filter(d => d.iso2 === selectedIso2)
+      .attr('stroke', '#f97316')
+      .attr('stroke-width', 3)
+      .attr('r', 8)
+      .attr('fill', '#f97316');
+
+    // Show the purpose breakdown
+    showPurposeBreakdown(selectedData);
+  });
 }
 
 function drawNetMap(countries, byIso2, idByIso2, nameById) {
@@ -642,43 +730,12 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
     'Oceania': ['AU', 'FJ', 'NZ', 'PG', 'SB', 'VU', 'WS', 'TO', 'PW', 'FM', 'MH', 'KI', 'NR', 'TV']
   };
 
-  // View mode state
-  let viewMode = 'netBalance'; // 'netBalance' or 'classification'
-
-  // Create controls container
-  const controls = el.append('div')
-    .attr('class', 'map-controls')
-    .style('display', 'flex')
-    .style('gap', '20px')
-    .style('margin-bottom', '12px')
-    .style('align-items', 'center')
-    .style('flex-wrap', 'wrap');
-
-  // Toggle button for view mode
-  const toggleBtn = controls.append('button')
-    .attr('class', 'view-toggle-btn')
-    .style('padding', '8px 16px')
-    .style('border', '2px solid #2563eb')
-    .style('border-radius', '6px')
-    .style('background', '#fff')
-    .style('color', '#2563eb')
-    .style('cursor', 'pointer')
-    .style('font-weight', '600')
-    .style('font-size', '13px')
-    .text('Switch to: Donor/Recipient Classification')
-    .on('click', () => {
-      viewMode = viewMode === 'netBalance' ? 'classification' : 'netBalance';
-      toggleBtn.text(viewMode === 'netBalance'
-        ? 'Switch to: Donor/Recipient Classification'
-        : 'Switch to: Net Balance View');
-      updateMap();
-    });
-
   // Add info text
-  controls.append('span')
+  el.append('div')
+    .style('margin-bottom', '8px')
     .style('font-size', '12px')
     .style('color', '#666')
-    .text('Hover over a country to see neighbors. Thick borders = contrasting neighbors.');
+    .text('Hover over a country to see details and highlight neighbors.');
 
   const svg = el.append('svg').attr('width', width).attr('height', height);
 
@@ -737,20 +794,13 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
     return customInterpolator(t);
   };
 
-  // Classification function: -1 = strong donor, 0 = mixed, 1 = strong recipient
+  // Classification function for tooltips: -1 = strong donor, 0 = mixed, 1 = strong recipient
   const classify = (d) => {
     if (!d) return null;
     const ratio = d.received / (d.donated + 1); // +1 to avoid division by zero
     if (d.net < -1e9 && ratio < 0.5) return -1; // Strong donor
     if (d.net > 1e9 && ratio > 2) return 1; // Strong recipient
     return 0; // Mixed
-  };
-
-  // Colors for classification view
-  const classColors = {
-    '-1': '#b91c1c', // Strong donor (red)
-    '0': '#fbbf24',  // Mixed (yellow)
-    '1': '#1d4ed8'   // Strong recipient (blue)
   };
 
   // Build reverse map from feature ID to ISO2
@@ -789,44 +839,8 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
     .attr('class', 'country')
     .attr('d', path);
 
-  // Create contrast borders group (drawn on top)
-  const contrastBordersG = svg.append('g').attr('class', 'contrast-borders');
 
-  // Calculate and draw contrast borders between neighboring countries
-  function drawContrastBorders() {
-    contrastBordersG.selectAll('*').remove();
-
-    const drawnPairs = new Set();
-
-    countries.features.forEach(f => {
-      const id = String(f.id);
-      const iso2 = iso2ById.get(id);
-      if (!iso2 || !neighbors[iso2]) return;
-
-      neighbors[iso2].forEach(neighborIso2 => {
-        const pairKey = [iso2, neighborIso2].sort().join('-');
-        if (drawnPairs.has(pairKey)) return;
-        drawnPairs.add(pairKey);
-
-        if (hasContrast(iso2, neighborIso2)) {
-          const neighborFeature = featureByIso2.get(neighborIso2);
-          if (!neighborFeature) return;
-
-          // Draw thicker border for this country edge
-          // We'll just highlight both countries' borders
-          contrastBordersG.append('path')
-            .attr('d', path(f))
-            .attr('fill', 'none')
-            .attr('stroke', '#000')
-            .attr('stroke-width', 2)
-            .attr('stroke-opacity', 0.6)
-            .attr('pointer-events', 'none');
-        }
-      });
-    });
-  }
-
-  // Update map colors based on view mode
+  // Update map colors (net balance view only)
   function updateMap() {
     countryPaths
       .attr('fill', f => {
@@ -835,13 +849,7 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
         if (!iso2) return 'url(#nodata-hatch)';
         const d = byIso2.get(iso2);
         if (!d) return 'url(#nodata-hatch)';
-
-        if (viewMode === 'classification') {
-          const c = classify(d);
-          return classColors[String(c)];
-        } else {
-          return colorNetBalance(d.net);
-        }
+        return colorNetBalance(d.net);
       })
       .attr('stroke', f => {
         const id = String(f.id);
@@ -851,7 +859,6 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
       })
       .attr('stroke-width', 0.5);
 
-    drawContrastBorders();
     updateLegend();
   }
 
@@ -923,15 +930,9 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
       tt.style('opacity', 0);
     });
 
-  // Legend container
-  const legendContainer = d3.select('#legend-diverging');
-
+  // Legend - render only net balance diverging legend
   function updateLegend() {
-    if (viewMode === 'classification') {
-      renderClassificationLegend(legendContainer, classColors, width);
-    } else {
-      renderDivergingLegend('#legend-diverging', colorNetBalance, symlogScale, symlogMin, symlogMax, width);
-    }
+    renderDivergingLegend('#legend-diverging', colorNetBalance, symlogScale, symlogMin, symlogMax, width);
   }
 
   // Regional summary panel
@@ -1018,48 +1019,6 @@ function drawNetMap(countries, byIso2, idByIso2, nameById) {
   updateMap();
 }
 
-// Classification legend renderer
-function renderClassificationLegend(container, classColors, width) {
-  container.html('');
-  const w = Math.min(400, width - 40);
-  const svg = container.append('svg').attr('width', w).attr('height', 50);
-
-  const items = [
-    { label: 'Net Donor', color: classColors['-1'] },
-    { label: 'Mixed', color: classColors['0'] },
-    { label: 'Net Recipient', color: classColors['1'] },
-    { label: 'No Data', pattern: true }
-  ];
-
-  const defs = svg.append('defs');
-  const patternDef = defs.append('pattern')
-    .attr('id', 'legend-class-hatch')
-    .attr('patternUnits', 'userSpaceOnUse')
-    .attr('width', 4)
-    .attr('height', 4);
-  patternDef.append('rect').attr('width', 4).attr('height', 4).attr('fill', '#d1d5db');
-  patternDef.append('path').attr('d', 'M0,4 L4,0').attr('stroke', '#9ca3af').attr('stroke-width', 0.8);
-
-  const itemWidth = w / items.length;
-
-  items.forEach((item, i) => {
-    const g = svg.append('g').attr('transform', `translate(${i * itemWidth + 10}, 10)`);
-
-    g.append('rect')
-      .attr('width', 20)
-      .attr('height', 14)
-      .attr('fill', item.pattern ? 'url(#legend-class-hatch)' : item.color)
-      .attr('stroke', item.pattern ? '#9ca3af' : 'none')
-      .attr('stroke-width', 0.5);
-
-    g.append('text')
-      .attr('x', 26)
-      .attr('y', 11)
-      .attr('font-size', '11px')
-      .attr('fill', '#666')
-      .text(item.label);
-  });
-}
 
 function drawPurposeMaps(countries, purposesData, idByIso2, nameById, topDonorsByRecipientPurpose) {
   const root = d3.select('#purposes-multiples');
@@ -1805,12 +1764,13 @@ function drawChordDiagram(chordData) {
   // Draw the chords (flows)
   const ribbons = svg.append('g')
     .attr('class', 'chord-ribbons')
-    .attr('fill-opacity', 0.65)
     .selectAll('path')
     .data(chords)
     .join('path')
     .attr('class', 'chord-ribbon')
     .attr('d', ribbon)
+    .attr('opacity', 0.65)
+    .style('pointer-events', 'all')
     .attr('fill', d => {
       // Color by the larger flow direction (donor -> recipient)
       const sourceRole = roles[countries[d.source.index]];
@@ -1827,21 +1787,49 @@ function drawChordDiagram(chordData) {
       const targetIso = countries[d.target.index];
       const sourceName = names[sourceIso] || sourceIso;
       const targetName = names[targetIso] || targetIso;
+      const sourceRole = roles[sourceIso];
+      const targetRole = roles[targetIso];
 
       d3.select(this).attr('opacity', 1).attr('stroke-width', 1.5);
 
-      // Show bidirectional flow info
+      // Show bidirectional flow info with clear direction
       const sourceToTarget = matrix[d.source.index][d.target.index];
       const targetToSource = matrix[d.target.index][d.source.index];
 
+      // Build tooltip with clear flow direction
+      let tooltipHtml = `<div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #eee;">
+        <strong>${sourceName}</strong> ↔ <strong>${targetName}</strong>
+      </div>`;
+
+      // Show the larger flow first (primary direction)
+      if (sourceToTarget > 0) {
+        const arrow = sourceRole === 'donor' ? '→' : '←';
+        tooltipHtml += `<div style="margin: 4px 0;">
+          <span style="color: #dc2626;">●</span> ${sourceName} donated to ${targetName}:<br/>
+          <strong style="font-size: 14px; margin-left: 12px;">$${fmtMoney(sourceToTarget)}</strong>
+        </div>`;
+      }
+
+      if (targetToSource > 0) {
+        tooltipHtml += `<div style="margin: 4px 0;">
+          <span style="color: #2563eb;">●</span> ${targetName} donated to ${sourceName}:<br/>
+          <strong style="font-size: 14px; margin-left: 12px;">$${fmtMoney(targetToSource)}</strong>
+        </div>`;
+      }
+
+      // If no flow in either direction
+      if (sourceToTarget === 0 && targetToSource === 0) {
+        tooltipHtml += `<div style="color: #666;">No direct aid flow between these countries</div>`;
+      }
+
       tooltip
-        .html(`
-          <strong>${sourceName} → ${targetName}</strong><br/>
-          $${fmtMoney(sourceToTarget)}<br/>
-          <strong>${targetName} → ${sourceName}</strong><br/>
-          $${fmtMoney(targetToSource)}
-        `)
+        .html(tooltipHtml)
         .style('opacity', 1)
+        .style('left', (event.pageX + 12) + 'px')
+        .style('top', (event.pageY - 10) + 'px');
+    })
+    .on('mousemove', function(event) {
+      tooltip
         .style('left', (event.pageX + 12) + 'px')
         .style('top', (event.pageY - 10) + 'px');
     })
@@ -1905,4 +1893,246 @@ function renderChordLegend() {
     .style('font-size', '12px')
     .style('color', '#666')
     .text(d => roleLabels[d[0]]);
+}
+
+// Temporal Stacked Area Chart: Aid priorities over time
+function drawTemporalChart(data) {
+  const container = d3.select('#temporal-chart');
+  const tooltip = d3.select('#tooltip');
+
+  // Get container dimensions
+  const containerWidth = container.node().getBoundingClientRect().width || 900;
+  const margin = { top: 20, right: 200, bottom: 50, left: 80 };
+  const width = containerWidth - margin.left - margin.right;
+  const height = 350 - margin.top - margin.bottom;
+
+  // Clear any existing content
+  container.html('');
+
+  const svg = container.append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Process data: pivot from long format to wide format
+  const { years, purposes, data: rawData } = data;
+
+  // Filter to years with meaningful data (1973+ has more coverage)
+  const minYear = 1973;
+  const filteredYears = years.filter(y => y >= minYear);
+
+  // Create a map for quick lookup
+  const dataMap = new Map();
+  rawData.forEach(d => {
+    const key = `${d.year}-${d.purpose}`;
+    dataMap.set(key, d.amount);
+  });
+
+  // Build wide-format data for stacking
+  const wideData = filteredYears.map(year => {
+    const row = { year };
+    purposes.forEach(purpose => {
+      row[purpose] = dataMap.get(`${year}-${purpose}`) || 0;
+    });
+    return row;
+  });
+
+  // Color scale - use a categorical scheme with good differentiation
+  const colorScale = d3.scaleOrdinal()
+    .domain(purposes)
+    .range([
+      '#2563eb', // Industrial development - blue
+      '#dc2626', // Road transport - red
+      '#059669', // Sectors not specified - green
+      '#7c3aed', // Economic policy - purple
+      '#ea580c', // Debt forgiveness - orange
+      '#0891b2', // General budget support - cyan
+      '#4f46e5', // Financial intermediaries - indigo
+      '#ca8a04', // Power generation - yellow
+      '#be185d', // Multisector aid - pink
+      '#65a30d', // Material relief - lime
+      '#6b7280'  // Other - gray
+    ]);
+
+  // Create stack generator
+  const stack = d3.stack()
+    .keys(purposes)
+    .order(d3.stackOrderDescending)
+    .offset(d3.stackOffsetNone);
+
+  let stackedData = stack(wideData);
+  let normalized = false;
+
+  // X scale - years
+  const x = d3.scaleLinear()
+    .domain(d3.extent(filteredYears))
+    .range([0, width]);
+
+  // Y scale - will be updated based on normalization
+  let y = d3.scaleLinear()
+    .domain([0, d3.max(stackedData, layer => d3.max(layer, d => d[1]))])
+    .range([height, 0]);
+
+  // Area generator
+  const area = d3.area()
+    .x(d => x(d.data.year))
+    .y0(d => y(d[0]))
+    .y1(d => y(d[1]))
+    .curve(d3.curveMonotoneX);
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('class', 'axis x-axis')
+    .attr('transform', `translate(0,${height})`)
+    .call(d3.axisBottom(x)
+      .tickFormat(d3.format('d'))
+      .ticks(10));
+
+  xAxis.append('text')
+    .attr('class', 'axis-label')
+    .attr('x', width / 2)
+    .attr('y', 40)
+    .attr('text-anchor', 'middle')
+    .text('Year');
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .attr('class', 'axis y-axis')
+    .call(d3.axisLeft(y)
+      .tickFormat(d => normalized ? d3.format('.0%')(d) : fmtAxisMoney(d))
+      .ticks(6));
+
+  yAxis.append('text')
+    .attr('class', 'axis-label y-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -height / 2)
+    .attr('y', -60)
+    .attr('text-anchor', 'middle')
+    .text('Aid Commitment (USD)');
+
+  // Draw areas
+  const areas = svg.append('g')
+    .attr('class', 'areas')
+    .selectAll('path')
+    .data(stackedData)
+    .join('path')
+    .attr('class', 'temporal-area')
+    .attr('fill', d => colorScale(d.key))
+    .attr('d', area)
+    .attr('opacity', 0.85)
+    .on('mouseover', function(event, d) {
+      d3.select(this).attr('opacity', 1);
+
+      // Highlight this layer
+      areas.attr('opacity', layer => layer.key === d.key ? 1 : 0.3);
+    })
+    .on('mousemove', function(event, d) {
+      // Find the year closest to the mouse position
+      const [mx] = d3.pointer(event);
+      const yearValue = x.invert(mx);
+      const nearestYear = Math.round(yearValue);
+      const dataPoint = d.find(p => p.data.year === nearestYear);
+
+      if (dataPoint) {
+        const value = dataPoint[1] - dataPoint[0];
+        const total = purposes.reduce((sum, p) => sum + (dataPoint.data[p] || 0), 0);
+        const pct = total > 0 ? (value / total * 100).toFixed(1) : 0;
+
+        tooltip
+          .html(`
+            <strong>${d.key}</strong><br/>
+            Year: ${nearestYear}<br/>
+            Amount: $${fmtMoney(value)}<br/>
+            Share: ${pct}%
+          `)
+          .style('opacity', 1)
+          .style('left', (event.pageX + 12) + 'px')
+          .style('top', (event.pageY - 10) + 'px');
+      }
+    })
+    .on('mouseout', function() {
+      areas.attr('opacity', 0.85);
+      tooltip.style('opacity', 0);
+    });
+
+  // Vertical line for year tracking
+  const verticalLine = svg.append('line')
+    .attr('class', 'hover-line')
+    .attr('y1', 0)
+    .attr('y2', height)
+    .attr('stroke', '#666')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '4,4')
+    .style('opacity', 0);
+
+  // Invisible overlay for year tracking
+  svg.append('rect')
+    .attr('width', width)
+    .attr('height', height)
+    .attr('fill', 'transparent')
+    .on('mousemove', function(event) {
+      const [mx] = d3.pointer(event);
+      verticalLine
+        .attr('x1', mx)
+        .attr('x2', mx)
+        .style('opacity', 0.5);
+    })
+    .on('mouseout', function() {
+      verticalLine.style('opacity', 0);
+    });
+
+  // Legend
+  const legend = d3.select('#temporal-legend').html('');
+
+  purposes.forEach(purpose => {
+    const item = legend.append('div')
+      .attr('class', 'temporal-legend-item')
+      .on('mouseover', function() {
+        areas.attr('opacity', layer => layer.key === purpose ? 1 : 0.3);
+      })
+      .on('mouseout', function() {
+        areas.attr('opacity', 0.85);
+      });
+
+    item.append('div')
+      .attr('class', 'swatch')
+      .style('background-color', colorScale(purpose));
+
+    item.append('span')
+      .text(purpose.length > 30 ? purpose.substring(0, 27) + '...' : purpose);
+  });
+
+  // Normalize toggle
+  const normalizeCheckbox = d3.select('#temporal-normalize');
+
+  normalizeCheckbox.on('change', function() {
+    normalized = this.checked;
+
+    // Recalculate stack with different offset
+    const newStack = d3.stack()
+      .keys(purposes)
+      .order(d3.stackOrderDescending)
+      .offset(normalized ? d3.stackOffsetExpand : d3.stackOffsetNone);
+
+    stackedData = newStack(wideData);
+
+    // Update Y scale
+    y.domain([0, normalized ? 1 : d3.max(stackedData, layer => d3.max(layer, d => d[1]))]);
+
+    // Update Y axis
+    yAxis.transition().duration(500)
+      .call(d3.axisLeft(y)
+        .tickFormat(d => normalized ? d3.format('.0%')(d) : fmtAxisMoney(d))
+        .ticks(6));
+
+    // Update Y axis label
+    yAxis.select('.y-label')
+      .text(normalized ? 'Share of Total Aid' : 'Aid Commitment (USD)');
+
+    // Update areas
+    areas.data(stackedData)
+      .transition().duration(500)
+      .attr('d', area);
+  });
 }

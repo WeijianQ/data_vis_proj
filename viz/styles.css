@@ -317,3 +317,63 @@ main { max-width: 100%; margin: 0 auto; padding: 0 8px; }
   color: #7c3aed;
   font-weight: 600;
 }
+
+/* Temporal chart - now half-width like other charts */
+#temporal-chart {
+  width: 100%;
+  min-height: 280px;
+}
+
+#temporal-controls {
+  margin-bottom: 12px;
+}
+
+#temporal-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#temporal-controls input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+#temporal-legend {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.temporal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.temporal-legend-item:hover {
+  opacity: 0.7;
+}
+
+.temporal-legend-item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.temporal-area {
+  transition: opacity 0.2s ease;
+}
+
+.temporal-area:hover {
+  opacity: 0.9;
+}

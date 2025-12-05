@@ -188,10 +188,6 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
         json.dumps({"countries": totals}, separators=(",", ":"))
     )
 
-    (out_dir / "iso2_names.json").write_text(
-        json.dumps(iso2_names, separators=(",", ":"))
-    )
-
     # Top 5 purposes by global total
     top5 = sorted(purpose_totals.items(), key=lambda kv: kv[1], reverse=True)[:5]
     purposes_order = [p for p, _ in top5]
@@ -265,16 +261,16 @@ def aggregate(full_csv: Path, out_dir: Path, chunksize: int = 250_000) -> None:
 
     # Chord diagram data: bilateral flows between countries
     # We need to identify top donors and top recipients for a focused visualization
-    # Get top 15 donors by total donated
-    top_donors = sorted(donated_by_iso2.items(), key=lambda kv: kv[1], reverse=True)[:15]
+    # Get top 10 donors by total donated
+    top_donors = sorted(donated_by_iso2.items(), key=lambda kv: kv[1], reverse=True)[:10]
     top_donor_iso2s = {iso2 for iso2, _ in top_donors}
 
-    # Get top 25 recipients by total received (excluding those already in top donors)
+    # Get top 10 recipients by total received (excluding those already in top donors)
     top_recipients = sorted(
         [(iso2, val) for iso2, val in received_by_iso2.items() if iso2 not in top_donor_iso2s],
         key=lambda kv: kv[1],
         reverse=True
-    )[:25]
+    )[:10]
     top_recipient_iso2s = {iso2 for iso2, _ in top_recipients}
 
     # Combine into a set of countries for the chord diagram

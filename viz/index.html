@@ -3,40 +3,39 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Aid Flows Dashboard</title>
+    <title>Global Aid Data: Donors, Recipients, Purposes, and Geographic and Temporal Trends</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
   </head>
   <body>
     <header class="dashboard-header">
-      <h1>Aid Flows Dashboard</h1>
-      <p>AidData Core Level 1 v3.1 (commitments, constant USD)</p>
+      <h1>Global Aid Data: Donors, Recipients, Purposes, and Geographic and Temporal Trends</h1>
+      <!-- <p>AidData Core Level 1 v3.1 (commitments, constant USD)</p> -->
     </header>
 
     <main class="dashboard-grid">
+      <!-- 1. Log-log scatter plot -->
       <section class="chart-block" id="scatter-section">
-        <h2>Donate vs. Receive (per country, log–log)</h2>
+        <h2>Which countries donate vs. receive more?</h2>
+        <p class="chart-subtitle">Log-log scatter plot of total aid donated vs. received per country</p>
         <div id="scatter"></div>
-        <p class="chart-note">Each dot is a country (ISO2). Line shows y = x. <strong>Click a country to see purpose breakdown.</strong></p>
+        <p class="chart-note">Each dot represents a country. The dashed line shows where donated = received. Countries above the line are net recipients (blue region); below are net donors (red region). <strong>Select from dropdown or click a dot to see purpose breakdown.</strong></p>
       </section>
 
+      <!-- 2. Choropleth map -->
       <section class="chart-block" id="netmap-section">
-        <h2>Net Balance (received − donated)</h2>
+        <h2>Are there geographic trends for donors vs. recipients?</h2>
+        <p class="chart-subtitle">Net balance map showing received − donated per country</p>
         <div id="netmap"></div>
         <div class="legend" id="legend-diverging"></div>
-        <p class="chart-note">Red = net donor, blue = net recipient.</p>
+        <p class="chart-note">Red countries are net donors (gave more than received). Blue countries are net recipients (received more than gave). Darker colors indicate larger imbalances. Hover to see details and neighboring countries.</p>
       </section>
 
-      <section class="chart-block" id="purposes-section">
-        <h2>Top 5 Purposes by Geography</h2>
-        <div id="purposes-multiples"></div>
-        <div class="legend" id="legend-seq"></div>
-        <p class="chart-note">Click a purpose to view. Higher = darker.</p>
-      </section>
-
+      <!-- 3. Chord diagram -->
       <section class="chart-block" id="chord-section">
-        <h2>Aid Flow Network</h2>
+        <h2>Who gives to whom?</h2>
+        <p class="chart-subtitle">Bilateral aid flows between top 10 donors and top 10 recipients</p>
         <div id="chord-controls">
           <label>
             <input type="checkbox" id="chord-filter-small" /> Hide small flows
@@ -44,7 +43,30 @@
         </div>
         <div id="chord-diagram"></div>
         <div id="chord-legend"></div>
-        <p class="chart-note"><span class="donor-color">Donors</span>, <span class="recipient-color">recipients</span>, <span class="mixed-color">mixed</span>. Hover for details.</p>
+        <p class="chart-note">Chord thickness represents flow amount. <span class="donor-color">Red = primarily donors</span>, <span class="recipient-color">blue = primarily recipients</span>. Hover over a chord to see exact amounts and direction.</p>
+      </section>
+
+      <!-- 4. Purpose choropleth -->
+      <section class="chart-block" id="purposes-section">
+        <h2>How do aid purposes distribute geographically?</h2>
+        <p class="chart-subtitle">Geographic distribution of aid received by purpose category</p>
+        <div id="purposes-multiples"></div>
+        <div class="legend" id="legend-seq"></div>
+        <p class="chart-note">Select a purpose from the menu to see which countries received the most aid for that category. Darker green indicates higher amounts. Hover over countries for details.</p>
+      </section>
+
+      <!-- 5. Temporal stacked area chart (half-width) -->
+      <section class="chart-block" id="temporal-section">
+        <h2>Have aid purposes changed over time?</h2>
+        <p class="chart-subtitle">Evolution of global aid distribution across top 10 purposes (1973–2013)</p>
+        <div id="temporal-controls">
+          <label>
+            <input type="checkbox" id="temporal-normalize" /> Show as percentage
+          </label>
+        </div>
+        <div id="temporal-chart"></div>
+        <div id="temporal-legend"></div>
+        <p class="chart-note">Stacked area chart showing how aid priorities have shifted over four decades. Toggle "Show as percentage" to compare relative shares. Hover for yearly details.</p>
       </section>
     </main>
 
